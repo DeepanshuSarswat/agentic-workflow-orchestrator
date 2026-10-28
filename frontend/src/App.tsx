@@ -177,6 +177,7 @@ function ApprovalPanel({ id, onDone }: { id: string; onDone: () => void }) {
   );
 }
 
+// Message content can be a string or a list of parts; never hand React an object.
 const asText = (c: unknown): string =>
   typeof c === "string" ? c : Array.isArray(c) ? c.map((x: any) => x?.text ?? "").join("") : JSON.stringify(c ?? "");
 
@@ -188,7 +189,21 @@ function TimelineItem({ event }: { event: RunEvent }) {
     detail = msg?.tool_calls ? `calls ${msg.tool_calls.map((t: any) => t.name).join(", ")}` : asText(msg?.content);
   } else if (event.node === "tools") {
     detail = (p.messages ?? []).map((m: any) => `${m.name} → ${asText(m.content)}`).join("\n");
-  }}
+  } else if (event.node === "pay") {
+    detail = JSON.stringify(p.payment);
+  } else if (event.node === "error") {
+    detail = p.error;
+  } else if (event.node === "human_decision") {
+    detail = `${p.approved ? "approved" : "rejected"}${p.comment ? `: ${p.comment}` : ""}`;
+  }
+  return (
+    <li className={`ev ev-${event.node}`}>
+      <span className="node">{event.node}</span>
+      <span className="time">{new Date(event.ts * 1000).toLocaleTimeString()}</span>
+      {detail && <pre>{detail}</pre>}
+    </li>
+  );
+}
 
 function StatusBadge({ status, outcome }: { status: string; outcome: string | null }) {
   const label = status === "completed" ? outcome ?? "done" : status.replace("_", " ");
