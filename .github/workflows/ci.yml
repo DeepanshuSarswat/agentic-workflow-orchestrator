@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r backend/requirements.txt
+      - name: Unit + graph tests (no LLM, scripted model)
+        run: cd backend && pytest -q
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Frontend type-check and build
+        run: cd frontend && npm install && npm run build
+
+  eval:
+    # Real-LLM regression gate. Needs the GOOGLE_API_KEY repo secret; skipped without it.
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      MODEL: google_genai:gemini-2.5-flash
+    steps:
+      - uses: actions/checkout@v4
+        if: env.GOOGLE_API_KEY != ''
+      - uses: actions/setup-python@v5
+        if: env.GOOGLE_API_KEY != ''
+        with: { python-version: "3.12" }
+      - run: pip install -r backend/requirements.txt
+        if: env.GOOGLE_API_KEY != ''
+      - name: Eval gate (accuracy >= 80%, zero false approvals)
+        if: env.GOOGLE_API_KEY != ''
+        run: python evals/run_evals.py
+      - uses: actions/upload-artifact@v4
+        if: always() && env.GOOGLE_API_KEY != ''
+        with: { name: eval-report, path: evals/report.json }
